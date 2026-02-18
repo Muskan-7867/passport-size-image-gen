@@ -27,7 +27,28 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
+          {/* Background Pattern Container */}
+        <div className="h-[100vh] w-full bg-black relative p-4">
+          {/* Black Grid with White Dots Background */}
+          <div
+            className="absolute inset-0 z-0"
+            style={{
+              background: "#000000",
+              backgroundImage: `
+                linear-gradient(to right, rgba(255,255,255,0) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(255,255,255,0) 1px, transparent 1px),
+                radial-gradient(circle, rgba(255,255,255, 0.2) 1px, transparent 1px)
+              `,
+              backgroundSize: "20px 20px, 20px 20px, 20px 20px",
+              backgroundPosition: "0 0, 0 0, 0 0",
+            }}
+          />
+          
+             {/* Your Content - placed above the background with z-index */}
+          <div className="relative z-10">
+            {children}
+          </div>
+          </div>
       </body>
     </html>
   );
