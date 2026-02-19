@@ -200,13 +200,7 @@ export default function Home() {
     { label: "Rows", value: rows, setter: setRows, min: 1, max: 10 },
     { label: "Columns", value: cols, setter: setCols, min: 1, max: 10 },
     { label: "Gap (px)", value: gap, setter: setGap, min: 0, max: 200 },
-    {
-      label: "Border (px)",
-      value: border,
-      setter: setBorder,
-      min: 0,
-      max: 100,
-    },
+
     {
       label: "Margin (px)",
       value: padding,
