@@ -14,25 +14,39 @@ function buildSheetCanvas(
   cols: number,
   padding: number,
   gap: number,
+  border: number,
 ): HTMLCanvasElement {
   // Passport photo aspect ratio: 35mm wide × 45mm tall
   const PASSPORT_RATIO = 35 / 45;
 
-  // Max cell size available from the A4 grid
-  const cellW = Math.floor((A4_W - padding * 2 - (cols - 1) * gap) / cols);
-  const cellH = Math.floor((A4_H - padding * 2 - (rows - 1) * gap) / rows);
 
-  // Fit photo inside cell while preserving 35:45 ratio (letterbox)
+  const availW = A4_W - padding * 2;
+  const availH = A4_H - padding * 2;
+
+  // Maximum possible photo width based on available horizontal space
+  const maxPhotoW_h = (availW - (cols - 1) * gap) / cols;
+  // Maximum possible photo height based on available vertical space
+  const maxPhotoH_v = (availH - (rows - 1) * gap) / rows;
+
   let photoW: number, photoH: number;
-  if (cellW / cellH > PASSPORT_RATIO) {
-    // Cell is wider than passport ratio → constrain by height
-    photoH = cellH;
-    photoW = Math.round(cellH * PASSPORT_RATIO);
+
+  if (maxPhotoW_h / maxPhotoH_v > PASSPORT_RATIO) {
+    // Height is the constraint
+    photoH = Math.floor(maxPhotoH_v);
+    photoW = Math.round(photoH * PASSPORT_RATIO);
   } else {
-    // Cell is taller than passport ratio → constrain by width
-    photoW = cellW;
-    photoH = Math.round(cellW / PASSPORT_RATIO);
+    // Width is the constraint
+    photoW = Math.floor(maxPhotoW_h);
+    photoH = Math.round(photoW / PASSPORT_RATIO);
   }
+
+  // Calculate total grid dimensions
+  const totalGridW = cols * photoW + (cols - 1) * gap;
+  const totalGridH = rows * photoH + (rows - 1) * gap;
+
+  // Center the entire grid on the page
+  const gridStartX = Math.round((A4_W - totalGridW) / 2);
+  const gridStartY = Math.round((A4_H - totalGridH) / 2);
 
   const page = document.createElement("canvas");
   page.width = A4_W;
@@ -43,29 +57,37 @@ function buildSheetCanvas(
 
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
-      // Center photo within its cell
-      const cellX = padding + col * (cellW + gap);
-      const cellY = padding + row * (cellH + gap);
-      const offsetX = Math.round((cellW - photoW) / 2);
-      const offsetY = Math.round((cellH - photoH) / 2);
-      const x = cellX + offsetX;
-      const y = cellY + offsetY;
+      const x = gridStartX + col * (photoW + gap);
+      const y = gridStartY + row * (photoH + gap);
 
+      // 1. Draw white background (the "paper" area of the photo)
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(x, y, photoW, photoH);
-      ctx.drawImage(
-        img,
-        croppedAreaPixels.x,
-        croppedAreaPixels.y,
-        croppedAreaPixels.width,
-        croppedAreaPixels.height,
-        x,
-        y,
-        photoW,
-        photoH,
-      );
-      // Cut guide around the photo
+
+      // 2. Draw border if specified (as an internal margin)
+      // The image will be drawn inside this margin
+      const imgX = x + border;
+      const imgY = y + border;
+      const imgW = photoW - border * 2;
+      const imgH = photoH - border * 2;
+
+      if (imgW > 0 && imgH > 0) {
+        ctx.drawImage(
+          img,
+          croppedAreaPixels.x,
+          croppedAreaPixels.y,
+          croppedAreaPixels.width,
+          croppedAreaPixels.height,
+          imgX,
+          imgY,
+          imgW,
+          imgH,
+        );
+      }
+
+      // 3. Draw cut guide (thin stroke around the photo)
       ctx.strokeStyle = "rgba(0,0,0,0.25)";
+      ctx.lineWidth = 1;
       ctx.strokeRect(x, y, photoW, photoH);
     }
   }
@@ -77,10 +99,11 @@ export default function Home() {
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<any>(null);
-  const [rows, setRows] = useState(4);
-  const [cols, setCols] = useState(4);
+  const [rows, setRows] = useState(5);
+  const [cols, setCols] = useState(5);
   const [padding, setPadding] = useState(20);
-  const [gap, setGap] = useState(40);
+  const [gap, setGap] = useState(38);
+  const [border, setBorder] = useState(20);
 
   const sheetPreviewRef = useRef<HTMLCanvasElement>(null);
   const previewContainerRef = useRef<HTMLDivElement>(null);
@@ -118,6 +141,7 @@ export default function Home() {
         cols,
         padding,
         gap,
+        border,
       );
       const canvas = sheetPreviewRef.current!;
       const scale = containerW / sheet.width;
@@ -129,7 +153,7 @@ export default function Home() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(sheet, 0, 0);
     };
-  }, [imageUrl, croppedAreaPixels, rows, cols, padding, gap]);
+  }, [imageUrl, croppedAreaPixels, rows, cols, padding, gap, border]);
 
   // Redraw on any dependency change
   useEffect(() => {
@@ -159,6 +183,7 @@ export default function Home() {
           cols,
           padding,
           gap,
+          border,
         );
         const a = document.createElement("a");
         a.href = sheet.toDataURL("image/png");
@@ -176,6 +201,13 @@ export default function Home() {
     { label: "Columns", value: cols, setter: setCols, min: 1, max: 10 },
     { label: "Gap (px)", value: gap, setter: setGap, min: 0, max: 200 },
     {
+      label: "Border (px)",
+      value: border,
+      setter: setBorder,
+      min: 0,
+      max: 100,
+    },
+    {
       label: "Margin (px)",
       value: padding,
       setter: setPadding,
@@ -183,6 +215,69 @@ export default function Home() {
       max: 400,
     },
   ];
+
+  const handleDownloadSinglePhoto = () => {
+    if (!image || !croppedAreaPixels) return;
+
+    const url = URL.createObjectURL(image);
+    const img = new Image();
+    img.src = url;
+
+    img.onload = () => {
+      // Passport ratio 35:45
+      const PASSPORT_RATIO = 35 / 45;
+
+      // High quality output (roughly 35x45mm at 300dpi)
+      const outputHeight = 1200;
+      const outputWidth = Math.round(outputHeight * PASSPORT_RATIO);
+
+      // Relative border size (current border is in A4 pixels, photo is roughly photoH pixels)
+      // For single download, let's keep it proportional or just use a fixed feel.
+      // Better: Scale the 'border' value from A4 context to our outputHeight context.
+      // In A4, photo is roughly A4_H / rows.
+      const A4_H = 3508; // A4 height in pixels at 300 DPI
+      const approxPhotoH_A4 = A4_H / rows;
+      const borderScale = outputHeight / approxPhotoH_A4;
+      const scaledBorder = Math.round(border * borderScale);
+
+      const canvas = document.createElement("canvas");
+      canvas.width = outputWidth;
+      canvas.height = outputHeight;
+
+      const ctx = canvas.getContext("2d")!;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, outputWidth, outputHeight);
+
+      const imgW = outputWidth - scaledBorder * 2;
+      const imgH = outputHeight - scaledBorder * 2;
+
+      if (imgW > 0 && imgH > 0) {
+        ctx.drawImage(
+          img,
+          croppedAreaPixels.x,
+          croppedAreaPixels.y,
+          croppedAreaPixels.width,
+          croppedAreaPixels.height,
+          scaledBorder,
+          scaledBorder,
+          imgW,
+          imgH,
+        );
+      }
+
+      // Add a thin border/cut guide even for single photo? Usually better for passport photos.
+      ctx.strokeStyle = "rgba(0,0,0,0.1)";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(0, 0, outputWidth, outputHeight);
+
+      const a = document.createElement("a");
+      a.href = canvas.toDataURL("image/png", 1.0);
+      a.download = `passport_photo_${Date.now()}.png`;
+      a.click();
+
+      URL.revokeObjectURL(url);
+    };
+  };
 
   return (
     <div
@@ -202,14 +297,14 @@ export default function Home() {
 
       {/* Main content */}
       <div
-        className={`w-full max-w-6xl flex gap-4 items-start ${
+        className={`w-full max-w-7xl flex gap-4 items-center ${
           image
-            ? "flex-col lg:flex-row"
+            ? "flex-col lg:flex-row justify-center items-start"
             : "flex-col justify-center items-center"
         }`}
       >
         {/* ── Left panel: Cropper + Controls ── */}
-        <div className="w-full lg:w-[400px] xl:w-[440px] shrink-0 bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl sm:rounded-3xl shadow-2xl">
+        <div className="w-full lg:w-[400px] xl:w-[540px] shrink-0  bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl sm:rounded-3xl shadow-2xl">
           <div className="p-3 sm:p-5 flex flex-col gap-4">
             {/* Cropper area */}
             <div className="relative h-[280px] sm:h-[340px] lg:h-[360px] w-full bg-zinc-900/50 rounded-xl sm:rounded-2xl border-2 border-dashed border-white/10 overflow-hidden transition-all hover:border-blue-500/50 group">
@@ -301,7 +396,7 @@ export default function Home() {
                             ),
                           )
                         }
-                        className="bg-zinc-800 border border-white/10 text-white rounded-lg sm:rounded-xl px-2 py-1.5 sm:py-2 text-xs sm:text-sm text-center focus:outline-none focus:border-blue-500 transition-all"
+                        className="bg-zinc-800 border border-white/10 text-white rounded-lg sm:rounded-xl px-2 py-1.5 sm:py-2 text-xs sm:text-sm text-center focus:outline-none focus:border-blue-500 transition-all cursor-pointer"
                       />
                     </div>
                   ))}
@@ -310,19 +405,16 @@ export default function Home() {
                 {/* Action buttons — stacked on mobile, side-by-side on sm+ */}
                 <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
                   <button
-                    onClick={() => {
-                      setImage(null);
-                      setZoom(1);
-                    }}
-                    className="w-full sm:flex-1 px-4 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl border border-white/10 text-white font-medium hover:bg-white/5 transition-all text-xs sm:text-sm uppercase tracking-wider"
+                    onClick={handleDownloadSinglePhoto}
+                    className="w-full sm:flex-1 px-4 py-2.5 sm:py-3 rounded-xl  border border-white/10 text-white font-medium hover:bg-white/5 transition-all text-xs sm:text-sm uppercase tracking-wider cursor-pointer"
                   >
-                    Change Photo
+                    Donwload Single Photo
                   </button>
                   <button
                     onClick={generateImage}
-                    className="w-full sm:flex-2 bg-linear-to-r from-blue-600 to-blue-500 text-white px-4 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl font-bold shadow-lg shadow-blue-500/20 hover:shadow-blue-500/40 hover:scale-[1.02] active:scale-95 transition-all text-xs sm:text-sm uppercase tracking-wider"
+                    className="w-full sm:flex-1 bg-linear-to-r from-blue-600 to-blue-500 text-white px-4 py-2.5 sm:py-3 rounded-xl  font-bold shadow-lg shadow-blue-500/20  hover:scale-[1.02] active:scale-95 transition-all text-xs sm:text-sm uppercase tracking-wider cursor-pointer"
                   >
-                    ↓ Download A4 Sheet
+                    Download A4 Sheet
                   </button>
                 </div>
               </>
