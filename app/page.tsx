@@ -19,7 +19,6 @@ function buildSheetCanvas(
   // Passport photo aspect ratio: 35mm wide × 45mm tall
   const PASSPORT_RATIO = 35 / 45;
 
-
   const availW = A4_W - padding * 2;
   const availH = A4_H - padding * 2;
 
@@ -336,15 +335,36 @@ export default function Home() {
                 </label>
               ) : (
                 imageUrl && (
-                  <Cropper
-                    image={imageUrl}
-                    crop={crop}
-                    zoom={zoom}
-                    aspect={35 / 45}
-                    onCropChange={setCrop}
-                    onZoomChange={setZoom}
-                    onCropComplete={onCropComplete}
-                  />
+                  <div className="relative w-full h-full">
+                    <button
+                      onClick={() => setImage(null)}
+                      className="absolute top-4 left-4 z-50 bg-black/40 hover:bg-black/60 backdrop-blur-md border border-white/20 text-white p-2.5 rounded-xl transition-all hover:scale-105 active:scale-95 group/back cursor-pointer flex items-center gap-2"
+                      title="Change Photo"
+                    >
+                      <svg
+                        className="w-5 h-5 transition-transform group-hover/back:-translate-x-1"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                        />
+                      </svg>
+                    </button>
+                    <Cropper
+                      image={imageUrl}
+                      crop={crop}
+                      zoom={zoom}
+                      aspect={35 / 45}
+                      onCropChange={setCrop}
+                      onZoomChange={setZoom}
+                      onCropComplete={onCropComplete}
+                    />
+                  </div>
                 )
               )}
             </div>
